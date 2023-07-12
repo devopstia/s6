@@ -87,3 +87,29 @@ echo "The OS distro is: $UBUNTU_DISTRO"
 
 ## =========================================================
 
+FREE_AWK=$(free -h |grep -i mem |awk -F" " '{print$7}')
+echo $FREE_AWK
+
+DF_AWK=$(df -h |grep overlay |awk -F" " '{print$5}')
+echo $DF_AWK
+
+if [ "$DF_AWK" = "80%" ]; then
+    echo "The filesystem check passed."
+elif [ "$DF_AWK" \< "80%" ]; then
+    echo "The filesystem check passed, and this is perfect."
+else
+    echo "The filesystem check failed."
+fi
+
+
+AGE="17"
+
+if [ "$AGE" -eq 18 ]; then
+    echo "You you are eligible to drive."
+elif [ "$AGE" -gt 18 ]; then
+    echo "It look like you have been driving already."
+elif [ "$AGE" -eq 17 ]; then
+    echo "You still have 1  more year to go"
+else
+    echo "You cannot drive"
+fi
