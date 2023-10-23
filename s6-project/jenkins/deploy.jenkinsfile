@@ -1,0 +1,254 @@
+
+def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss", TimeZone.getTimeZone('UTC'))
+pipeline {
+    agent {label 'jenkins-master'}
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '2', daysToKeepStr: '2'))
+        disableConcurrentBuilds()
+        timeout (time: 10, unit: 'MINUTES')
+        timestamps()
+    }
+    parameters {
+        string (name: 'branchName', defaultValue: 'main', description: 'The branch name docker image')
+        choice (name: 'pushMode', choices: '\ndockerhub\naws-ecr\nboth\nnone', description: 'Both will push the image to dockerhub and AWS ECR')
+        string (name: 'dockerhubRepository', defaultValue: 'leonardtia/devops-test-repo', description: 'The Dockerhub repository where to push the image')
+        string (name: 'tag', defaultValue: 'develop', description: 'The image name')
+        string(name: 'awsAccountNumber', defaultValue: '064137398917', description: 'Account type')
+        string(name: 'awsRegion', defaultValue: 'us-east-1', description: 'Account region')
+        string(name: 'ecrRepositoryName', defaultValue: 'development', description: 'ECR repository name')
+        string(name: 'jenkinsIp', defaultValue: '18.214.235.89', description: '')
+        string(name: 'portForward', defaultValue: '8060', description: '')
+
+    }
+    stages {
+        stage ('Checking Code Repository') {
+            steps {
+                dir("${WORKSPACE}/scr") {
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${params.branchName}"]],
+                        doGenerateSubmoduleConfigurations: false,
+                        extensions: [[$class: 'LocalBranch']],
+                        submoduleCfg: [],
+                        userRemoteConfigs: [[
+                        url: 'https://github.com/DEL-ORG/s6-git.git',
+                        credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
+            }
+        }
+        stage ('Clean up') {
+            steps {
+                script {
+                    sh """
+                        docker rm -f \$(docker ps -aq) || true
+                        docker rmi -f \$(docker images -q) || true
+                    """
+                }
+            }
+        }
+        stage ('Building the image') {
+            steps {
+                dir("${WORKSPACE}/scr") {
+                    script {
+                        println('::Building the image and pushing into Dockerhub::')
+                        if (params.pushMode == 'dockerhub') {
+                            docker.withRegistry('','tia-dockerhub-credentials') {
+                            dockerhub()
+                            }
+                        }
+                        if (params.pushMode == 'aws-ecr') {
+                            println('::Building the image and pushing into AWS ECR::')
+                            withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY', passwordVariable: 'AWS_SECRET_KEY')]) {
+                            ecr()
+                            }
+                        }
+                        if (params.pushMode == 'both') {
+                            withCredentials([usernamePassword(credentialsId: 'aws-creds', usernameVariable: 'AWS_ACCESS_KEY', passwordVariable: 'AWS_SECRET_KEY')]) {
+                            println('::Building the image and pushing into Dockerhub::')
+                            docker.withRegistry('','tia-dockerhub-credentials') {
+                            dockerhub()
+
+                            println('::Building the image and pushing into AWS ECR::')
+                            ecr()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage ('Deploying to the Target Server') {
+            steps {
+               dir("${WORKSPACE}/scr") {
+                script {
+                    sh """
+                        docker run -itd -p ${params.portForward}:80 "${params.dockerhubRepository}:${params.tag}"
+                        docker ps
+                    """
+                    }
+               } 
+            }
+        }
+        stage ('Checking If The Application is Running') {
+            steps {
+               dir("${WORKSPACE}/scr") {
+                script {
+                    sh """
+                        docker ps
+                        docker images
+                    """
+                    }
+               } 
+            }
+        }
+        stage ('Final Clean Up') {
+            steps {
+                cleanWs()
+            }
+        }  
+    }
+    post {
+        success {
+            script {
+                def slackUrl = 'https://hooks.slack.com/services/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'
+                def color = '#36a64f' // Green color for success
+                def publicIp = "${params.jenkinsIp}"
+                def message = """
+                    {
+                        "attachments": [
+                            {
+                                "color": "${color}",
+                                "title": "Build Success: ${JOB_NAME}",
+                                "text": "Build number ${currentBuild.displayName} finished with status: SUCCESS",
+                                "fields": [
+                                    {
+                                        "title": "Description",
+                                        "value": "This Build is to Package and Deploy Alpha Application",
+                                        "short": false
+                                    },
+                                    {
+                                        "title": "Click on The Link to open the Build URL",
+                                        "value": "<http://${publicIp}:8080/job/${JOB_NAME}/${currentBuild.number}|Open Build>",
+                                        "short": false
+                                    },
+                                    {
+                                        "title": "Click on The Link to access the Application",
+                                        "value": "<http://${publicIp}:8060|Open Build>",
+                                        "short": false
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                """
+                sh """
+                    curl -X POST -H 'Content-type: application/json' --data '${message}' ${slackUrl}
+                """
+            }
+        }
+        failure {
+            script {
+                def slackUrl = 'https://hooks.slack.com/services/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'
+                def color = '#d63333' // Red color for failure
+                def publicIp = "${params.jenkinsIp}"
+                def message = """
+                    {
+                        "attachments": [
+                            {
+                                "color": "${color}",
+                                "title": "Build Failure: ${JOB_NAME}",
+                                "text": "Build number ${currentBuild.displayName} finished with status: FAILED",
+                                "fields": [
+                                    {
+                                        "title": "Description",
+                                        "value": "This Build is to Package and Deploy Alpha Application",
+                                        "short": false
+                                    },
+                                    {
+                                        "title": "Click on The Link to open the Build URL",
+                                        "value": "<http://${publicIp}:8080/job/${JOB_NAME}/${currentBuild.number}|Open Build>",
+                                        "short": false
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                """
+                sh """
+                    curl -X POST -H 'Content-type: application/json' --data '${message}' ${slackUrl}
+                """
+            }
+        }
+    }
+}
+
+
+
+def dockerhub() {
+    dockerImage = docker.build("${params.dockerhubRepository}" + ":${params.tag}")
+    dockerImage.push()
+}
+
+def ecr() {
+    sh """
+    mkdir -p ~/.aws
+    cat <<EOF > ~/.aws/credentials
+    [default]
+    aws_access_key_id = ${AWS_ACCESS_KEY}
+    aws_secret_access_key = ${AWS_SECRET_KEY}
+EOF
+    cat <<EOF > ~/.aws/config
+    [default]
+    region = ${params.awsRegion}
+    output = json
+EOF
+    """
+    ecrRepositoryURL = "${params.awsAccountNumber}.dkr.ecr.${params.awsRegion}.amazonaws.com"
+    dockerImage = docker.build("${ecrRepositoryURL}" + "/" + "${params.ecrRepositoryName}" + ":${params.tag}")
+        sh """
+        aws ecr get-login-password --region ${params.awsRegion} | docker login --username AWS --password-stdin ${ecrRepositoryURL}
+        """
+    dockerImage.push()
+}
+
+def dockerhub_ecr() {
+    dockerImage = docker.build("${params.account}" + ":${params.account}")
+}
+
+def sanityCheck()
+{
+    println("::=========================================================================================::")
+    sh """
+    [[ -z "${params.pushMode}" ]] && echo "Parameter pushMode name is not set" && exit 2
+    [[ -z "${params.jenkinsIp}" ]] && echo "Parameter jenkinsIp name is not set" && exit 2
+    [[ -z "${params.portForward}" ]] && echo "Parameter portForward name is not set" && exit 2
+
+    if [[ "${params.pushMode}" == "both" ]]
+    then
+        [[ -z ${params.branchName} ]] && echo "Parameter branchName name is not set" && exit 2
+        [[ -z ${params.dockerhubRepository} ]] && echo "Parameter dockerhubRepository is not set" && exit 2
+        [[ -z ${params.tag} ]] && echo "Parameter tag name is not set" && exit 2
+        [[ -z ${params.awsAccountNumber} ]] && echo "Parameter awsAccountNumber is not set" && exit 2
+        [[ -z ${params.awsRegion} ]] && echo "Parameter awsRegion is not set" && exit 2
+        [[ -z ${params.ecrRepositoryName} ]] && echo "Parameter ecrRepositoryName is not set" && exit 2
+
+    elif [[ "${params.pushMode}" == "aws-ecr" ]] 
+    then
+        [[ -z ${params.branchName} ]] && echo "Parameter branchName name is not set" && exit 2
+        [[ -z ${params.tag} ]] && echo "Parameter tag name is not set" && exit 2
+        [[ -z ${params.awsAccountNumber} ]] && echo "Parameter awsAccountNumber is not set" && exit 2
+        [[ -z ${params.awsRegion} ]] && echo "Parameter awsRegion is not set" && exit 2
+        [[ -z ${params.ecrRepositoryName} ]] && echo "Parameter ecrRepositoryName is not set" && exit 2
+
+    elif [[ "${params.pushMode}" == "dockerhub" ]] 
+    then
+        [[ -z ${params.branchName} ]] && echo "Parameter branchName name is not set" && exit 2
+        [[ -z ${params.tag} ]] && echo "Parameter tag name is not set" && exit 2
+        [[ -z ${params.dockerhubRepository} ]] && echo "Parameter dockerhubRepository is not set" && exit 2
+    else
+        echo "DEFAULT TO FAILED"
+    fi
+    """
+}
