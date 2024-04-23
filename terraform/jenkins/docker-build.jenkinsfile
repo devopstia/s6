@@ -1,0 +1,96 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_HUB_REGISTRY="devopseasylearning"
+        DOCKER_CREDENTIAL_ID = 'del-docker-hub-auth'
+    }
+    parameters {
+        string(name: 'BRANCH_NAME', defaultValue: 'master', description: '')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '')
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                script {
+                    git credentialsId: 'jenkins-ssh-agents-private-key',
+                        url: 'git@github.com:devopstia/s6.git',
+                        branch: "${params.BRANCH_NAME}"
+                }
+            }
+        }
+        stage('Building the image') {
+            steps {
+                dir("${WORKSPACE}/terraform/docker") {
+                    script {
+                        sh """ 
+                            docker build -t ${env.DOCKER_HUB_REGISTRY}/jenkins-master-slave:"${params.IMAGE_TAG}
+                        """ 
+                    }
+                }
+            }
+        }
+        
+        // stage('Login into') {
+        //     steps {
+        //         script {
+        //             // Login to Docker Hub
+        //             withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIAL_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+        //                 // Use Docker CLI to login
+        //                 sh "docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD"
+        //             }
+        //         }
+        //     }
+        // }
+        // stage('Pushing application 01 into DockerHub') {
+        //     steps {
+        //         script {
+        //             sh """
+        //                 docker push ${env.DOCKER_HUB_REGISTRY}/${env.ALPHA_APPLICATION_01_REPO}:${params.APP1_TAG}
+        //             """
+        //         }
+        //     }
+        // }
+        // stage('Pushing application 02 into DockerHub') {
+        //     steps {
+        //         script {
+        //             sh """
+        //                 docker push ${env.DOCKER_HUB_REGISTRY}/${env.ALPHA_APPLICATION_02_REPO}:${params.APP2_TAG}
+        //             """
+        //         }
+        //     }
+        // }
+        // stage('Login into s8marjorie DockerHub') {
+        //     steps {
+        //         script {
+        //             sh """
+        //                 docker login -u thedevopslady -p dckr_pat_D_lEO8hxlSoof91Wn5BRnza2S8Q
+        //             """
+        //         }
+        //     }
+        // }
+        // stage('Pushing into s8marjorie DockerHub') {
+        //     steps {
+        //         script {
+        //             sh """
+        //                 docker tag devopseasylearning/alpha-application-01:app1.1.1.0 thedevopslady/alpha-application-01:app1.1.1.0
+
+        //                 docker tag devopseasylearning/alpha-application-02:app2.1.1.0 thedevopslady/alpha-application-02:app2.1.1.0
+
+        //                 docker push thedevopslady/alpha-application-01:app1.1.1.0
+        //                 docker push thedevopslady/alpha-application-02:app2.1.1.0
+        //             """
+        //         }
+        //     }
+        // }
+        // stage('Deploying the application') {
+        //     steps {
+        //         script {
+        //             sh """
+        //                 docker run -itd -p ${params.PORT_ON_DOCKER_HOST}:80 --name ${params.CONTAINER_NAME} ${params.IMAGE_NAME}-application-02
+        //                 docker ps |grep ${params.CONTAINER_NAME}
+        //             """ 
+        //         }
+        //     }
+        // }
+    }
+}
