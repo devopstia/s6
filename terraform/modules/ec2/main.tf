@@ -3,9 +3,9 @@ provider "aws" {
 }
 
 resource "aws_instance" "example" {
-  depend_on = [
-    aws_security_group.instance_sg
-  ]
+  #   depend_on = [
+  #     aws_security_group.instance_sg
+  #   ]
   ami           = "ami-080e1f13689e07408" # Update with your desired AMI ID
   instance_type = "t2.micro"              # Update with your desired instance type
   key_name      = "jenkins-key"           # Update with your key pair name

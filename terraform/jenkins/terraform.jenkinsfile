@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_HUB_REGISTRY="devopseasylearning"
+        DOCKER_CREDENTIAL_ID = 'del-docker-hub-auth'
+        AWS_CREADENTIALS_ID = 'terraform-s6-aws-auth'
+    }
+    parameters {
+        string(name: 'BRANCH_NAME', defaultValue: 'master', description: '')
+        string(name: 'IMAGE_TAG', defaultValue: 'latest', description: '')
+    }
+    stages {
+        stage('Clone Repository') {
+            steps {
+                script {
+                    git credentialsId: 'devops-tia-repo',
+                        url: 'git@github.com:devopstia/s6.git',
+                        branch: "${params.BRANCH_NAME}"
+                }
+            }
+        }
+        stage('List Contents') {
+            steps {
+                script {
+                    dir("${WORKSPACE}") {
+                    withCredentials([
+                        usernamePassword(credentialsId: 'del-docker-hub-auth', 
+                        usernameVariable: 'DOCKER_HUB_USERNAME', 
+                        passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+                            docker.image("devopseasylearning/jenkins-master-slave:latest").inside('-u 0:0') {
+                                sh """
+                                    ls -l
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Configure AWS CLI') {
+            steps {
+                script {
+                    dir("${WORKSPACE}/terraform/modules/ec2") {
+                    withCredentials([
+                            [$class: 'AmazonWebServicesCredentialsBinding',
+                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                            credentialsId: "${env.AWS_CREADENTIALS_ID}",
+                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
+
+                            usernamePassword(credentialsId: 'tia-dockehub-token', 
+                            usernameVariable: 'DOCKER_HUB_USERNAME', 
+                            passwordVariable: 'DOCKER_HUB_PASSWORD')]) {
+                                docker.image("devopseasylearning/jenkins-master-slave:latest").inside('-u 0:0') {
+                                sh """
+                                    aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                                    aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                                    aws configure set default.region us-east-1
+
+                                    terraform init
+                                    terraform fmt
+                                    terraform plan
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
