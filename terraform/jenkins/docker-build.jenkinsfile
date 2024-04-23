@@ -12,7 +12,7 @@ pipeline {
         stage('Clone Repository') {
             steps {
                 script {
-                    git credentialsId: 'jenkins-ssh-agents-private-key',
+                    git credentialsId: 'devops-tia-repo',
                         url: 'git@github.com:devopstia/s6.git',
                         branch: "${params.BRANCH_NAME}"
                 }
@@ -23,7 +23,7 @@ pipeline {
                 dir("${WORKSPACE}/terraform/docker") {
                     script {
                         sh """ 
-                            docker build -t ${env.DOCKER_HUB_REGISTRY}/jenkins-master-slave:"${params.IMAGE_TAG}
+                            docker build -t ${env.DOCKER_HUB_REGISTRY}/jenkins-master-slave:"${params.IMAGE_TAG} .
                         """ 
                     }
                 }
