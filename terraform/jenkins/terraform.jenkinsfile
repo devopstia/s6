@@ -59,6 +59,7 @@ pipeline {
                                     terraform init
                                     terraform fmt
                                     terraform plan
+                                    terraform destroy --auto-approve
                                 """
                             }
                         }
