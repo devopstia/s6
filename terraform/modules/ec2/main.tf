@@ -1,7 +1,3 @@
-provider "aws" {
-  region = "us-east-1" # Update with your desired region
-}
-
 resource "aws_instance" "example" {
   # depends_on = [
   #   aws_security_group.instance_sg
