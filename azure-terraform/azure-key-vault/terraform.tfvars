@@ -8,6 +8,3 @@ tags = {
   "create_by"      = "Terraform"
   "cloud_provider" = "aws"
 }
-
-appId    = "6c726a0e-f0c8-4edf-a2a3-382fecaedcf6"
-password = "~AL8Q~aXRgx5kqymp_1w.bZFsuLlBveLbrD8VcXw"

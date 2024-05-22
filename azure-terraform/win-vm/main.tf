@@ -33,8 +33,9 @@ resource "azurerm_windows_virtual_machine" "example" {
   resource_group_name = data.azurerm_resource_group.rg.name
   computer_name       = "example-vm"
   admin_username      = "adminuser"
-  admin_password      = "AdminPassword1234!"
-  size                = "Standard_DS1_v2"
+  # admin_password      = "AdminPassword1234!"
+  admin_password = data.azurerm_key_vault_secret.example.value
+  size           = "Standard_DS1_v2"
 
 
   network_interface_ids = [
