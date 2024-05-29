@@ -1,0 +1,1 @@
+aws eks update-kubeconfig --name development-revive-eks --region us-east-1 --alias development-revive-eks
